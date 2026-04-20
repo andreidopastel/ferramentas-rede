@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Cores
+# Cores para o terminal
 V='\033[0;32m'
 A='\033[1;33m'
 VM='\033[0;31m'
@@ -8,61 +8,77 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (COM RESUMO) ---${NC}"
+echo -e "${V}--- CANIVETE SUÍÇO DE REDE ---${NC}"
 
-echo -e "\nQual o alvo do teste? (Padrão: 8.8.8.8)"
-read -t 10 -p "IP ou 'y' para padrão: " RESP
+# Seleção de Alvo
+echo -n "Alvo (padrão 8.8.8.8) ou digite o IP: "
+read RESP
+TARGET=${RESP:-8.8.8.8}
 
-if [ "$RESP" == "y" ] || [ "$RESP" == "Y" ] || [ -z "$RESP" ]; then
-    TARGET="8.8.8.8"
+echo -e "\n${V}Iniciando Testes em Tempo Real...${NC}"
+echo -e "------------------------------------"
+
+# 1. Teste de Rede Local (Gateway)
+echo -e "${A}[1] TESTANDO CONEXÃO LOCAL (WI-FI/ROTEADOR)${NC}"
+GW=$(ip route | grep default | awk '{print $3}' | head -n 1)
+if [ -n "$GW" ]; then
+    ping -c 4 "$GW"
+    GW_RESULT="OK"
 else
-    TARGET=$RESP
+    echo -e "${VM}Gateway não detectado!${NC}"
+    GW_RESULT="FALHA"
 fi
 
-echo -e "\n${V}Iniciando testes... aguarde.${NC}"
+# 2. Teste de Estabilidade e Perda (Internet)
+echo -e "\n${A}[2] TESTANDO ESTABILIDADE E PERDA (INTERNET)${NC}"
+PING_OUT=$(ping -c 10 "$TARGET")
+echo "$PING_OUT"
 
-# 1. Estabilidade e Perda (Ping)
-ping -c 10 "$TARGET" > resultado_ping.txt
-LOSS=$(grep -oP '\d+(?=% packet loss)' resultado_ping.txt)
-AVG=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-MDEV=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $7}' | cut -d'.' -f1)
+# Extração de dados para o relatório
+LOSS=$(echo "$PING_OUT" | grep -oP '\d+(?=% packet loss)')
+AVG=$(echo "$PING_OUT" | grep "avg" | awk -F'/' '{print $5}' | cut -d'.' -f1)
+MDEV=$(echo "$PING_OUT" | grep "avg" | awk -F'/' '{print $7}' | cut -d'.' -f1)
 
-# 2. Velocidade (Speedtest)
-echo -e "${A}Medindo velocidade de banda...${NC}"
+# 3. Teste de Velocidade
+echo -e "\n${A}[3] MEDINDO VELOCIDADE DE BANDA (AGUARDE...)${NC}"
 SPEED_OUT=$(speedtest-cli --simple 2>/dev/null)
+echo "$SPEED_OUT"
 DOWNLOAD=$(echo "$SPEED_OUT" | grep "Download" | awk '{print $2}' | cut -d'.' -f1)
 
-clear
-echo -e "${V}--- RESULTADO DO DIAGNÓSTICO ---${NC}"
-echo -e "Alvo: $TARGET"
-echo -e "--------------------------------"
+# --- GERAÇÃO DO RELATÓRIO FINAL ---
+echo -e "\n\n${V}====================================${NC}"
+echo -e "${V}       RELATÓRIO DE QUALIDADE       ${NC}"
+echo -e "${V}====================================${NC}"
 
-# Lógica de Avaliação de Latência (Ping)
-if [ "$AVG" -lt 50 ]; then STATUS_PING="${V}BOM (Baixa)${NC}";
-elif [ "$AVG" -lt 150 ]; then STATUS_PING="${A}MÉDIO (Moderada)${NC}";
-else STATUS_PING="${VM}RUIM (Alta)${NC}"; fi
+# Avaliação da Latência
+if [ -z "$AVG" ]; then STATUS_LAT="${VM}DESCONECTADO${NC}";
+elif [ "$AVG" -lt 50 ]; then STATUS_LAT="${V}BOM (Baixa)${NC}";
+elif [ "$AVG" -lt 150 ]; then STATUS_LAT="${A}MÉDIO (Moderada)${NC}";
+else STATUS_LAT="${VM}RUIM (Alta)${NC}"; fi
 
-# Lógica de Avaliação de Estabilidade (Jitter/MDEV)
-if [ "$MDEV" -lt 10 ]; then STATUS_JITTER="${V}EXCELENTE${NC}";
-elif [ "$MDEV" -lt 30 ]; then STATUS_JITTER="${A}OSCILANTE${NC}";
-else STATUS_JITTER="${VM}INSTÁVEL${NC}"; fi
+# Avaliação do Jitter (Instabilidade)
+if [ -z "$MDEV" ]; then STATUS_JIT="${VM}---${NC}";
+elif [ "$MDEV" -lt 15 ]; then STATUS_JIT="${V}ESTÁVEL${NC}";
+elif [ "$MDEV" -lt 35 ]; then STATUS_JIT="${A}OSCILANTE${NC}";
+else STATUS_JIT="${VM}INSTÁVEL (Ruim)${NC}"; fi
 
-# Lógica de Perda de Pacotes
-if [ "$LOSS" -eq 0 ]; then STATUS_LOSS="${V}NENHUMA${NC}";
-else STATUS_LOSS="${VM}CRÍTICA ($LOSS%)${NC}"; fi
+# Avaliação de Perda
+if [ "$LOSS" -eq 0 ]; then STATUS_LOSS="${V}NENHUMA (Perfeito)${NC}";
+else STATUS_LOSS="${VM}COM FALHAS ($LOSS%)${NC}"; fi
 
-# Exibição do Resumo
-echo -e "LATÊNCIA:   $AVG ms -> $STATUS_PING"
-echo -e "JITTER:     $MDEV ms -> $STATUS_JITTER"
-echo -e "PERDA:      $STATUS_LOSS"
-echo -e "DOWNLOAD:   $DOWNLOAD Mbps"
+echo -e "CONEXÃO LOCAL:  $GW_RESULT"
+echo -e "LATÊNCIA PING:  $AVG ms -> $STATUS_LAT"
+echo -e "INSTABILIDADE:  $MDEV ms -> $STATUS_JIT"
+echo -e "PERDA DADOS:    $STATUS_LOSS"
+echo -e "VELOCIDADE:     ${DOWNLOAD:-0} Mbps"
+echo -e "------------------------------------"
 
-echo -e "--------------------------------"
-echo -n "VEREDITO FINAL: "
-
-if [ "$LOSS" -gt 0 ]; then echo -e "${VM}CONEXÃO COM FALHAS (PERDA DE DADOS)${NC}";
-elif [ "$AVG" -gt 150 ] || [ "$MDEV" -gt 30 ]; then echo -e "${A}CONEXÃO LENTA/INSTÁVEL (GARGALO)${NC}";
-else echo -e "${V}CONEXÃO SAUDÁVEL${NC}"; fi
-
-echo -e "--------------------------------"
-rm resultado_ping.txt
+# VEREDITO FINAL
+if [ "$LOSS" -gt 0 ]; then
+    echo -e "VEREDITO: ${VM}CONEXÃO COM PERDA DE SINAL${NC}"
+elif [ "$AVG" -gt 150 ]; then
+    echo -e "VEREDITO: ${A}CONEXÃO LENTA (LATÊNCIA ALTA)${NC}"
+else
+    echo -e "VEREDITO: ${V}CONEXÃO DENTRO DOS PADRÕES${NC}"
+fi
+echo -e "===================================="
