@@ -18,17 +18,17 @@ TARGET=${RESP:-8.8.8.8}
 
 echo -e "\n${V}Iniciando testes...${NC}"
 
-# 1. Gateway Local (Ajustado para seu IP detectado: 192.168.127.1)
+# 1. Gateway Local (Ajustado para seu IP: 192.168.127.1)
 echo -e "\n${A}[1] TESTE DE REDE LOCAL (WI-FI)${NC}"
 GW=$(ip route 2>/dev/null | grep default | awk '{print $3}' | head -n 1)
-[ -z "$GW" ] && GW="192.168.127.1" # Força o IP que vimos no seu trace
+[[ -z "$GW" ]] && GW="192.168.127.1"
 
 echo -e "Testando Roteador: $GW"
 GW_PING_RAW=$(ping -c 5 "$GW" 2>/dev/null | grep "avg")
 
-if [ -n "$GW_PING_RAW" ]; then
+if [[ -n "$GW_PING_RAW" ]]; then
     GW_AVG=$(echo "$GW_PING_RAW" | awk -F'/' '{print $5}' | cut -d'.' -f1)
-    if [ "$GW_AVG" -lt 15 ]; then
+    if [[ "$GW_AVG" -lt 15 ]]; then
         echo -e "Resumo: ${V}EXCELENTE ($GW_AVG ms)${NC}"
     else
         echo -e "Resumo: ${A}LATÊNCIA LOCAL ALTA ($GW_AVG ms)${NC}"
@@ -43,10 +43,18 @@ ping -c 6 "$TARGET" > resultado_ping.txt
 LOSS=$(grep -oP '\d+(?=% packet loss)' resultado_ping.txt)
 AVG_VAL=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
 
-echo -e "Perda: ${LOSS:-0}% | Latência: ${AVG_VAL:-0}ms"
-if [[ "${LOSS:-0}" -gt 0 ]]; then echo -e "Resumo: ${VM}PERDA DE PACOTES${NC}";
-elif [[ "${AVG_VAL:-0}" -lt 60 ]]; then echo -e "Resumo: ${V}BOM${NC}";
-else echo -e "Resumo: ${A}MÉDIO${NC}"; fi
+# Garante que as variáveis não sejam vazias para não quebrar o código
+LOSS_VAL=${LOSS:-0}
+LAT_VAL=${AVG_VAL:-0}
+
+echo -e "Perda: ${LOSS_VAL}% | Latência: ${LAT_VAL}ms"
+if [[ "$LOSS_VAL" -gt 0 ]]; then 
+    echo -e "Resumo: ${VM}PERDA DE PACOTES${NC}"
+elif [[ "$LAT_VAL" -lt 60 ]]; then 
+    echo -e "Resumo: ${V}BOM${NC}"
+else 
+    echo -e "Resumo: ${A}MÉDIO${NC}"
+fi
 
 # 3. Rastreio
 echo -e "\n${A}[3] RASTREIO DE ROTA${NC}"
@@ -55,14 +63,20 @@ tracepath -n "$TARGET" | head -n 8
 # 4. Velocidade
 echo -e "\n${A}[4] VELOCIDADE${NC}"
 SPEED_OUT=$(speedtest-cli --simple 2>/dev/null)
-if [ -n "$SPEED_OUT" ]; then
+if [[ -n "$SPEED_OUT" ]]; then
     echo "$SPEED_OUT"
-    DOWN=$(echo "$SPEED_OUT" | grep "Download" | awk '{print $2}' | cut -d'.' -f1)
-    if [[ "${DOWN:-0}" -gt 50 ]]; then echo -e "Resumo: ${V}VELOCIDADE ALTA${NC}";
-    elif [[ "${DOWN:-0}" -gt 15 ]]; then echo -e "Resumo: ${A}VELOCIDADE MÉDIA${NC}";
-    else echo -e "Resumo: ${VM}VELOCIDADE BAIXA${NC}"; fi
+    DOWN_RAW=$(echo "$SPEED_OUT" | grep "Download" | awk '{print $2}' | cut -d'.' -f1)
+    DOWN_VAL=${DOWN_RAW:-0}
+    
+    if [[ "$DOWN_VAL" -gt 50 ]]; then 
+        echo -e "Resumo: ${V}VELOCIDADE ALTA${NC}"
+    elif [[ "$DOWN_VAL" -gt 15 ]]; then 
+        echo -e "Resumo: ${A}VELOCIDADE MÉDIA${NC}"
+    else 
+        echo -e "Resumo: ${VM}VELOCIDADE BAIXA${NC}"
+    fi
 else
-    echo -e "Resumo: ${VM}SPEEDTEST FALHOU${NC}"
+    echo -e "Resumo: ${VM}SPEEDTEST FALHOU OU ESTÁ LENTO${NC}"
 fi
 
 echo -e "\n${V}--- DIAGNÓSTICO FINALIZADO ---${NC}"
