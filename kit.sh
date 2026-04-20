@@ -10,10 +10,9 @@ NC='\033[0m'
 clear
 echo -e "${V}--- CANIVETE SUÍÇO DE REDE ---${NC}"
 
-# Pergunta ao usuário qual o alvo do teste
-echo -e "\nDeseja usar o alvo padrão (${AZ}8.8.8.8${NC})?"
-echo -n "Digite 'y' para SIM ou digite o IP/HOST: "
-read RESP
+# Pergunta com tempo de espera (se não responder em 10s, usa o padrão)
+echo -e "\nQual o alvo do teste? (Padrão: 8.8.8.8)"
+read -t 10 -p "IP ou 'y' para padrão: " RESP
 
 if [ "$RESP" == "y" ] || [ "$RESP" == "Y" ] || [ -z "$RESP" ]; then
     TARGET="8.8.8.8"
@@ -23,40 +22,36 @@ fi
 
 echo -e "\n${V}Iniciando testes para: ${AZ}$TARGET${NC}"
 
-# 1. Gateway Local (Roteador)
-# Corrigido: Se não achar o IP, ele não tenta dar ping no vazio
-GW=$(ip route | grep default | awk '{print $3}' | head -n 1)
+# 1. Gateway Local
 echo -e "\n${A}[1] TESTE DE REDE LOCAL (WI-FI)${NC}"
+GW=$(ip route | grep default | awk '{print $3}' | head -n 1)
 if [ -z "$GW" ]; then
-    echo -e "${VM}Erro: Gateway não encontrado (Verifique se o Wi-Fi está ligado).${NC}"
+    echo -e "${VM}Gateway não identificado via comando 'ip route'.${NC}"
 else
-    ping -c 5 "$GW" | grep "avg" || echo -e "${VM}Roteador inacessível!${NC}"
+    echo -e "Testando Roteador: $GW"
+    ping -c 4 "$GW" | grep "avg" || echo -e "${VM}Sem resposta do roteador.${NC}"
 fi
 
-# 2. Perda de Pacotes e Jitter
+# 2. Estabilidade (Ping)
 echo -e "\n${A}[2] ESTABILIDADE E PERDA DE PACOTES${NC}"
-# Corrigido: Usando aspas para garantir que o alvo seja lido
-PING_EXT=$(ping -c 10 "$TARGET" 2>/dev/null)
-if [ $? -eq 0 ]; then
-    LOSS=$(echo "$PING_EXT" | grep -oP '\d+(?=% packet loss)')
-    AVG=$(echo "$PING_EXT" | grep "avg" | awk -F'/' '{print $5}')
-    MDEV=$(echo "$PING_EXT" | grep "avg" | awk -F'/' '{print $7}' | cut -d' ' -f1)
+ping -c 6 "$TARGET" > resultado_ping.txt
+LOSS=$(grep -oP '\d+(?=% packet loss)' resultado_ping.txt)
+AVG=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}')
 
-    echo -e "Alvo: ${AZ}$TARGET${NC}"
+if [ -z "$LOSS" ]; then
+    echo -e "${VM}Erro ao alcançar o alvo $TARGET${NC}"
+else
     echo -e "Perda de Pacotes: ${VM}${LOSS}%${NC}"
     echo -e "Latência Média: ${AZ}${AVG}ms${NC}"
-    echo -e "Jitter (Instabilidade): ${AZ}${MDEV}ms${NC}"
-else
-    echo -e "${VM}Erro: Não foi possível alcançar o alvo $TARGET${NC}"
 fi
 
-# 3. Rastreio de Rota
+# 3. Rastreio (Tracepath)
 echo -e "\n${A}[3] RASTREIO DE ROTA (GARGALOS)${NC}"
-# Corrigido: Adicionado o alvo no comando tracepath
-tracepath -n "$TARGET" | head -n 10
+tracepath -n "$TARGET" | head -n 8
 
-# 4. Velocidade de Banda
+# 4. Velocidade
 echo -e "\n${A}[4] TESTE DE VELOCIDADE (SPEEDTEST)${NC}"
-speedtest-cli --simple || echo -e "${VM}Speedtest falhou.${NC}"
+speedtest-cli --simple || echo -e "${VM}Speedtest indisponível.${NC}"
 
 echo -e "\n${V}--- DIAGNÓSTICO FINALIZADO ---${NC}"
+rm resultado_ping.txt
