@@ -15,8 +15,9 @@ TARGET=${RESP:-8.8.8.8}
 [[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="8.8.8.8"
 
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
-# Forçamos o uso de IP numérico para evitar erros de DNS no rastreio
-tracepath -n -m 20 "$TARGET" 2>/dev/null | tee rota.txt
+# Limpeza: mostra apenas saltos válidos, esconde "no reply" e mensagens de erro do final
+tracepath -n -m 10 "$TARGET" 2>/dev/null | grep -v "no reply" | grep -v "Too many hops" | grep -v "Resume" | uniq | tee rota.txt
+
 GW_DETECTADO=$(grep -E "^ 1:" rota.txt | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
 
 echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
@@ -52,9 +53,16 @@ echo -e "\n${A}[4] TESTE DE VELOCIDADE${NC}"
 speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest Offline${NC}"
 
 echo -e "\n${A}[5] INFO TÉCNICA WI-FI${NC}"
+# Tenta pegar o SSID de duas fontes diferentes
 WIFI_INFO=$(dumpsys connectivity | grep -i "networkExtraInfo" | head -n 1 | awk -F'extra: ' '{print $2}' | tr -d '"')
-# Busca frequência de forma mais agressiva para contornar bloqueios
+
+# Tentativa mais agressiva de pegar frequência (MHz)
 FREQ_VAL=$(dumpsys wifi | grep -E "mFrequency|freq|mWifiInfo" | grep -oE "[25][0-9]{3}" | head -n 1)
+
+# Plano B: se o dumpsys falhar, tenta o comando cmd (alguns Androids permitem)
+if [[ -z "$FREQ_VAL" ]]; then
+    FREQ_VAL=$(cmd wifi status 2>/dev/null | grep -oE "Freq: [25][0-9]{3}" | grep -oE "[25][0-9]{3}")
+fi
 
 if [[ -n "$WIFI_INFO" ]]; then
     echo -e "${AZ}Rede Atual:${NC} $WIFI_INFO"
