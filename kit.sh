@@ -15,7 +15,8 @@ TARGET=${RESP:-8.8.8.8}
 [[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="8.8.8.8"
 
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
-tracepath -n -m 10 "$TARGET" | head -n 5 > rota.txt 2>/dev/null
+# Forçamos o uso de IP numérico para evitar erros de DNS no rastreio
+tracepath -n -m 20 "$TARGET" 2>/dev/null | tee rota.txt
 GW_DETECTADO=$(grep -E "^ 1:" rota.txt | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
 
 echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
@@ -33,15 +34,13 @@ fi
 
 echo -e "Roteador Alvo: ${V}$GW_DETECTADO${NC}"
 
-if [[ -n "$GW_DETECTADO" ]]; then
-    ping -c 5 "$GW_DETECTADO" > resultado_gw.txt 2>&1
-    if [ $? -eq 0 ]; then
-        cat resultado_gw.txt
-        GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-        echo -e "Resumo Local: ${V}${GW_AVG:-0} ms${NC}"
-    else
-        echo -e "${VM}Erro no ping local${NC}"
-    fi
+ping -c 5 "$GW_DETECTADO" > resultado_gw.txt 2>&1
+if [ $? -eq 0 ]; then
+    cat resultado_gw.txt
+    GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
+    echo -e "Resumo Local: ${V}${GW_AVG:-0} ms${NC}"
+else
+    echo -e "${VM}Erro no ping local${NC}"
 fi
 
 echo -e "\n${A}[3] ESTABILIDADE INTERNET${NC}"
@@ -54,7 +53,8 @@ speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest Offline${NC}"
 
 echo -e "\n${A}[5] INFO TÉCNICA WI-FI${NC}"
 WIFI_INFO=$(dumpsys connectivity | grep -i "networkExtraInfo" | head -n 1 | awk -F'extra: ' '{print $2}' | tr -d '"')
-FREQ_VAL=$(dumpsys wifi | grep "mFrequency" | head -n 1 | awk -F'=' '{print $2}' | awk '{print $1}')
+# Busca frequência de forma mais agressiva para contornar bloqueios
+FREQ_VAL=$(dumpsys wifi | grep -E "mFrequency|freq|mWifiInfo" | grep -oE "[25][0-9]{3}" | head -n 1)
 
 if [[ -n "$WIFI_INFO" ]]; then
     echo -e "${AZ}Rede Atual:${NC} $WIFI_INFO"
