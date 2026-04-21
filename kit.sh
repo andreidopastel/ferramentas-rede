@@ -1,6 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# Cores para o visual profissional
 V='\033[0;32m'
 A='\033[1;33m'
 VM='\033[0;31m'
@@ -8,59 +7,66 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (VERSÃO TERMINAL PURO) ---${NC}"
+echo -e "${V}--- CANIVETE SUÍÇO DE REDE ---${NC}"
 
-# 1. Seleção de Alvo
-echo -ne "\nAlvo do teste? (Padrão: 8.8.8.8) ou 'y' para padrão: "
+echo -ne "\nAlvo do teste? Padrão 8.8.8.8: "
 read -t 10 RESP
 TARGET=${RESP:-8.8.8.8}
-[[ "$TARGET" == "y" ]] && TARGET="8.8.8.8"
+[[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="8.8.8.8"
 
-# --- PASSO 1: RASTREIO DE ROTA ---
-echo -e "\n${A}[1] RASTREIO DE ROTA (IDENTIFICANDO O CAMINHO)${NC}"
-tracepath -n "$TARGET" | head -n 10 | tee rota.txt
-# Pega o primeiro IP que responder após o localhost
-GW_DETECTADO=$(grep -E "^ 1:|^ 2:" rota.txt | grep -v "127.0.0.1" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
+echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
+tracepath -n -m 10 "$TARGET" | head -n 5 > rota.txt 2>/dev/null
+GW_DETECTADO=$(grep -E "^ 1:" rota.txt | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
 
-# --- PASSO 2: TESTE DE REDE LOCAL ---
-echo -e "\n${A}[2] TESTE DE REDE LOCAL (WI-FI)${NC}"
+echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
 if [[ -z "$GW_DETECTADO" ]]; then
-    GW_DETECTADO=$(ip route | grep default | awk '{print $3}')
+    GW_DETECTADO=$(ip route show | grep default | awk '{print $3}' | head -n 1)
 fi
-echo -e "Roteador Alvo: ${V}$GW_DETECTADO${NC}"
-ping -c 5 "$GW_DETECTADO" | tee resultado_gw.txt
-GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-echo -e "Resumo Local: ${V}${GW_AVG:-0} ms${NC}"
 
-# --- PASSO 3: ESTABILIDADE E PERDA (INTERNET) ---
-echo -e "\n${A}[3] ESTABILIDADE E PERDA DE PACOTES${NC}"
+if [[ -z "$GW_DETECTADO" ]]; then
+    GW_DETECTADO=$(getprop net.dns1 | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
+fi
+
+if [[ -z "$GW_DETECTADO" ]]; then
+    GW_DETECTADO="192.168.3.1"
+fi
+
+echo -e "Roteador Alvo: ${V}$GW_DETECTADO${NC}"
+
+if [[ -n "$GW_DETECTADO" ]]; then
+    ping -c 5 "$GW_DETECTADO" > resultado_gw.txt 2>&1
+    if [ $? -eq 0 ]; then
+        cat resultado_gw.txt
+        GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
+        echo -e "Resumo Local: ${V}${GW_AVG:-0} ms${NC}"
+    else
+        echo -e "${VM}Erro no ping local${NC}"
+    fi
+fi
+
+echo -e "\n${A}[3] ESTABILIDADE INTERNET${NC}"
 ping -c 10 "$TARGET" | tee resultado_ping.txt
 LAT_AVG=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
 echo -e "Status: ${V}${LAT_AVG:-0} ms${NC}"
 
-# --- PASSO 4: TESTE DE VELOCIDADE ---
-echo -e "\n${A}[4] TESTE DE VELOCIDADE (SPEEDTEST)${NC}"
+echo -e "\n${A}[4] TESTE DE VELOCIDADE${NC}"
 speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest Offline${NC}"
 
-# --- PASSO 5: INFO TÉCNICA DO WI-FI (VIA DUMPSYS) ---
-echo -e "\n${A}[5] INFO DO CANAL E CONEXÃO (TERMINAL)${NC}"
-# Tenta pegar SSID e Frequência do sistema sem precisar de API externa
-WIFI_DATA=$(dumpsys connectivity | grep -i "WIFI" | grep -i "networkExtraInfo" | head -n 1)
-FREQ_DATA=$(dumpsys wifi | grep "mFrequency" | head -n 1 | awk '{print $1}' | tr -d 'mFrequency=')
+echo -e "\n${A}[5] INFO TÉCNICA WI-FI${NC}"
+WIFI_INFO=$(dumpsys connectivity | grep -i "networkExtraInfo" | head -n 1 | awk -F'extra: ' '{print $2}' | tr -d '"')
+FREQ_VAL=$(dumpsys wifi | grep "mFrequency" | head -n 1 | awk -F'=' '{print $2}' | awk '{print $1}')
 
-if [[ -n "$WIFI_DATA" ]]; then
-    echo -e "${AZ}Rede Atual:${NC} $(echo $WIFI_DATA | awk -F'extra: ' '{print $2}')"
+if [[ -n "$WIFI_INFO" ]]; then
+    echo -e "${AZ}Rede Atual:${NC} $WIFI_INFO"
 fi
 
-if [[ -n "$FREQ_DATA" ]]; then
-    echo -ne "${AZ}Frequência:${NC} $FREQ_DATA MHz "
-    if [ "$FREQ_DATA" -lt 3000 ]; then
-        echo -e "${VM}(Canal 2.4GHz - Sujeito a Interferência)${NC}"
+if [[ -n "$FREQ_VAL" ]]; then
+    echo -ne "${AZ}Frequência:${NC} $FREQ_VAL MHz "
+    if [ "$FREQ_VAL" -lt 3000 ]; then
+        echo -e "${VM}2.4GHz${NC}"
     else
-        echo -e "${V}(Canal 5GHz - Alta Performance)${NC}"
+        echo -e "${V}5GHz${NC}"
     fi
-else
-    echo -e "${VM}Dica: Ligue o GPS para liberar dados de frequência no Android.${NC}"
 fi
 
 echo -e "\n${V}--- DIAGNÓSTICO FINALIZADO ---${NC}"
