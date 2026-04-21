@@ -8,7 +8,7 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (VERSÃO MULTI-GW) ---${NC}"
+echo -e "${V}--- CANIVETE SUÍÇO DE REDE (LÓGICA DINÂMICA) ---${NC}"
 
 # 1. Seleção de Alvo
 echo -e "\nQual o alvo do teste? (Padrão: 8.8.8.8)"
@@ -16,55 +16,51 @@ read -t 10 -p "IP ou 'y' para padrão: " RESP
 TARGET=${RESP:-8.8.8.8}
 [[ "$TARGET" == "y" || "$TARGET" == "Y" ]] && TARGET="8.8.8.8"
 
-# 2. Teste de Rede Local (Varredura de IPs)
-echo -e "\n${A}[1] TESTE DE REDE LOCAL (BUSCANDO GATEWAY)${NC}"
+echo -e "\n${V}Iniciando Diagnóstico para: ${AZ}$TARGET${NC}"
 
-# Lista inteligente de IPs (Incluindo o seu 3.1 e o 100.1 que você pediu)
-GATEWAYS=("192.168.3.1" "192.168.1.1" "192.168.5.1" "192.168.100.1" "192.168.127.1")
-GW_ENCONTRADO=""
+# --- PASSO A: RASTREIO INICIAL (O Batedor) ---
+echo -e "\n${A}[*] IDENTIFICANDO ROTA E GATEWAY...${NC}"
+# Pega o primeiro IP que aparece no tracepath (Salto 1)
+GW_DETECTADO=$(tracepath -n -max 3 "$TARGET" | grep -E "^ 1:" | awk '{print $2}' | head -n 1)
 
-# Tenta detectar o IP via sistema (ip route)
-GW_SISTEMA=$(ip route 2>/dev/null | grep default | awk '{print $3}' | head -n 1)
-[[ -n "$GW_SISTEMA" ]] && GATEWAYS=("$GW_SISTEMA" "${GATEWAYS[@]}")
-
-for ip in "${GATEWAYS[@]}"; do
-    echo -n "Testando $ip... "
-    if ping -c 1 -W 1 "$ip" > /dev/null 2>&1; then
-        echo -e "${V}OK!${NC}"
-        GW_ENCONTRADO="$ip"
-        break
-    else
-        echo -e "${VM}X${NC}"
-    fi
-done
-
-if [[ -n "$GW_ENCONTRADO" ]]; then
-    echo -e "\nFazendo teste completo em: ${V}$GW_ENCONTRADO${NC}"
-    ping -c 5 "$GW_ENCONTRADO" | tee resultado_gw.txt
-    GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-    echo -e "Resumo Local: ${V}EXCELENTE ($GW_AVG ms)${NC}"
-else
-    echo -e "\n${VM}Resumo Local: SEM RESPOSTA DIRETA${NC}"
-    echo -e "${AZ}Dica: O roteador bloqueia ICMP, mas o Passo [3] confirmou tráfego.${NC}"
+if [[ -z "$GW_DETECTADO" || "$GW_DETECTADO" == "no" ]]; then
+    # Se o tracepath falhar no primeiro salto, tenta o método reserva do sistema
+    GW_DETECTADO=$(ip route 2>/dev/null | grep default | awk '{print $3}' | head -n 1)
 fi
 
-# 3. Estabilidade Internet
+# --- PASSO 1: TESTE DE REDE LOCAL (Usando o IP detectado) ---
+echo -e "\n${A}[1] TESTE DE REDE LOCAL (WI-FI)${NC}"
+if [[ -n "$GW_DETECTADO" ]]; then
+    echo -e "Roteador detectado: ${V}$GW_DETECTADO${NC}"
+    ping -c 5 "$GW_DETECTADO" | tee resultado_gw.txt
+    GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
+    
+    if [[ -n "$GW_AVG" ]]; then
+        if [[ "$GW_AVG" -lt 15 ]]; then echo -e "Resumo Local: ${V}EXCELENTE ($GW_AVG ms)${NC}"
+        else echo -e "Resumo Local: ${A}OSCILANTE ($GW_AVG ms)${NC}"; fi
+    else
+        echo -e "Resumo Local: ${VM}SEM RESPOSTA (Roteador bloqueia ICMP)${NC}"
+    fi
+else
+    echo -e "Resumo Local: ${VM}GATEWAY NÃO IDENTIFICADO${NC}"
+fi
+
+# --- PASSO 2: ESTABILIDADE EXTERNA ---
 echo -e "\n${A}[2] ESTABILIDADE E PERDA DE PACOTES (INTERNET)${NC}"
 ping -c 10 "$TARGET" | tee resultado_ping.txt
 LOSS_VAL=$(grep -oP '\d+(?=% packet loss)' resultado_ping.txt || echo 0)
 LAT_VAL=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
 
-echo -e "------------------------------------"
-if [[ "$LOSS_VAL" -gt 0 ]]; then echo -e "Status: ${VM}INSTÁVEL ($LOSS_VAL% perda)${NC}"
-else echo -e "Status: ${V}BOM ($LAT_VAL ms)${NC}"; fi
+if [[ "$LOSS_VAL" -gt 0 ]]; then echo -e "Resumo Internet: ${VM}INSTÁVEL ($LOSS_VAL% perda)${NC}"
+else echo -e "Resumo Internet: ${V}BOM ($LAT_VAL ms)${NC}"; fi
 
-# 4. Rastreio
-echo -e "\n${A}[3] RASTREIO DE ROTA${NC}"
+# --- PASSO 3: EXIBIÇÃO DA ROTA COMPLETA ---
+echo -e "\n${A}[3] RASTREIO DE ROTA COMPLETO${NC}"
 tracepath -n "$TARGET" | head -n 10
 
-# 5. Speedtest
-echo -e "\n${A}[4] TESTE DE VELOCIDADE${NC}"
-speedtest-cli --simple 2>/dev/null || echo "Speedtest falhou"
+# --- PASSO 4: VELOCIDADE ---
+echo -e "\n${A}[4] TESTE DE VELOCIDADE (SPEEDTEST)${NC}"
+speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest offline${NC}"
 
 echo -e "\n${V}--- DIAGNÓSTICO FINALIZADO ---${NC}"
 rm -f resultado_ping.txt resultado_gw.txt
