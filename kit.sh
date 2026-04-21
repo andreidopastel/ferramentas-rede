@@ -8,7 +8,7 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (ORDEM DINÂMICA) ---${NC}"
+echo -e "${V}--- CANIVETE SUÍÇO DE REDE ---${NC}"
 
 # 1. Seleção de Alvo
 echo -e "\nQual o alvo do teste? (Padrão: 8.8.8.8)"
