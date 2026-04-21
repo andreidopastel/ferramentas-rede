@@ -8,7 +8,7 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (VERSÃO TERMINAL PURO) ---${NC}"
+echo -e "${V}--- CANIVETE SUÍÇO DE REDE ---${NC}"
 
 # 1. Seleção de Alvo
 echo -ne "\nAlvo do teste? (Padrão: 8.8.8.8) ou 'y' para padrão: "
@@ -17,13 +17,13 @@ TARGET=${RESP:-8.8.8.8}
 [[ "$TARGET" == "y" ]] && TARGET="8.8.8.8"
 
 # --- PASSO 1: RASTREIO DE ROTA ---
-echo -e "\n${A}[1] RASTREIO DE ROTA (IDENTIFICANDO O CAMINHO)${NC}"
+echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
 tracepath -n "$TARGET" | head -n 10 | tee rota.txt
 # Pega o primeiro IP que responder após o localhost
 GW_DETECTADO=$(grep -E "^ 1:|^ 2:" rota.txt | grep -v "127.0.0.1" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
 
 # --- PASSO 2: TESTE DE REDE LOCAL ---
-echo -e "\n${A}[2] TESTE DE REDE LOCAL (WI-FI)${NC}"
+echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
 if [[ -z "$GW_DETECTADO" ]]; then
     GW_DETECTADO=$(ip route | grep default | awk '{print $3}')
 fi
@@ -39,11 +39,11 @@ LAT_AVG=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1
 echo -e "Status: ${V}${LAT_AVG:-0} ms${NC}"
 
 # --- PASSO 4: TESTE DE VELOCIDADE ---
-echo -e "\n${A}[4] TESTE DE VELOCIDADE (SPEEDTEST)${NC}"
+echo -e "\n${A}[4] TESTE DE VELOCIDADE${NC}"
 speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest Offline${NC}"
 
 # --- PASSO 5: INFO TÉCNICA DO WI-FI (VIA DUMPSYS) ---
-echo -e "\n${A}[5] INFO DO CANAL E CONEXÃO (TERMINAL)${NC}"
+echo -e "\n${A}[5] INFO DO CANAL E CONEXÃO${NC}"
 # Tenta pegar SSID e Frequência do sistema sem precisar de API externa
 WIFI_DATA=$(dumpsys connectivity | grep -i "WIFI" | grep -i "networkExtraInfo" | head -n 1)
 FREQ_DATA=$(dumpsys wifi | grep "mFrequency" | head -n 1 | awk '{print $1}' | tr -d 'mFrequency=')
