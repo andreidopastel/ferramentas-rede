@@ -9,7 +9,7 @@ NC='\033[0m'
 
 TARGET="8.8.8.8"
 
-echo -e "${A}--- CANIVETE SUÍÇO DE REDE (MDNet Edition) ---${NC}"
+echo -e "${A}--- ANÁLISE DE REDE---${NC}"
 
 # [1] RASTREIO DE ROTA (ROTA COMPLETA)
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
