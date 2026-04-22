@@ -1,73 +1,79 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/bin/bash
 
-# Definição de Cores para o terminal
-V='\033[0;32m'   # Verde
-A='\033[1;33m'   # Amarelo
-VM='\033[0;31m'  # Vermelho
-AZ='\033[0;34m'  # Azul
-NC='\033[0m'     # Sem cor
+# --- CONFIGURAÇÃO DE CORES ---
+VM='\033[0;31m'
+V='\033[0;32m'
+AZ='\033[0;34m'
+A='\033[1;33m'
+NC='\033[0m'
 
-clear
-echo -e "${V}--- CANIVETE SUÍÇO DE REDE (MDNet Edition) ---${NC}"
+TARGET="8.8.8.8"
 
-# Seleção de Alvo
-echo -ne "\nAlvo do teste? Padrão 8.8.8.8: "
-read -t 10 RESP
-TARGET=${RESP:-8.8.8.8}
-[[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="8.8.8.8"
+echo -e "${A}--- CANIVETE SUÍÇO DE REDE (MDNet Edition) ---${NC}"
 
-echo -e "\n${A}[1] RASTREIO DE ROTA (MÁX 10 SALTOS)${NC}"
-# Limpa o tracepath para mostrar apenas o que interessa
-tracepath -n -m 10 "$TARGET" 2>/dev/null | grep -v "no reply" | grep -v "Too many hops" | uniq | tee rota.txt
+# [1] RASTREIO DE ROTA (ROTA COMPLETA)
+echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
+# Sem o limite de 10 saltos para ver a rota inteira até o destino
+tracepath -n "$TARGET"
 
-# Detecta o Gateway (Roteador) dinamicamente pelo primeiro salto do trace
-GW_DETECTADO=$(grep -E "^ 1:" rota.txt | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -n 1)
-
+# [2] TESTE DE REDE LOCAL
 echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
-# Fallbacks caso o trace falhe em detectar o GW
-[[ -z "$GW_DETECTADO" ]] && GW_DETECTADO=$(ip route show | grep default | awk '{print $3}' | head -n 1)
-[[ -z "$GW_DETECTADO" ]] && GW_DETECTADO="192.168.3.1"
-
-echo -e "Roteador Local: ${V}$GW_DETECTADO${NC}"
-
-ping -c 5 "$GW_DETECTADO" > resultado_gw.txt 2>&1
-if [ $? -eq 0 ]; then
-    cat resultado_gw.txt
-    GW_AVG=$(grep "avg" resultado_gw.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-    echo -e "Latência Média Local: ${V}${GW_AVG:-0} ms${NC}"
+GATEWAY=$(ip route | grep default | awk '{print $3}')
+if [ -n "$GATEWAY" ]; then
+    echo -e "${AZ}Roteador Local:${NC} $GATEWAY"
+    ping -c 3 "$GATEWAY" | grep "time=" || echo -e "${VM}Erro ao pingar roteador. Verifique o Wi-Fi.${NC}"
 else
-    echo -e "${VM}Erro ao pingar roteador. Verifique a conexão Wi-Fi.${NC}"
+    echo -e "${VM}Erro: Gateway não encontrado.${NC}"
 fi
 
-echo -e "\n${A}[3] ESTABILIDADE DA INTERNET${NC}"
-ping -c 10 "$TARGET" | tee resultado_ping.txt
-LAT_AVG=$(grep "avg" resultado_ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
-echo -e "Latência Média Google: ${V}${LAT_AVG:-0} ms${NC}"
+# [3] ESTABILIDADE DA INTERNET
+echo -e "\n${A}[3] ESTABILIDADE DA INTERNET (PING)${NC}"
+ping -c 10 "$TARGET" | grep -E "packets|avg"
 
+# [4] TESTE DE VELOCIDADE
 echo -e "\n${A}[4] TESTE DE VELOCIDADE (SPEEDTEST)${NC}"
-speedtest-cli --simple 2>/dev/null || echo -e "${VM}Speedtest-cli não instalado ou sem internet.${NC}"
+if command -v speedtest-cli &> /dev/null; then
+    speedtest-cli --simple
+else
+    echo -e "${VM}Speedtest-cli não instalado. Rode: pip install speedtest-cli${NC}"
+fi
 
+# [5] INFORMAÇÕES TÉCNICAS WI-FI (COM CANAL E BANDA)
 echo -e "\n${A}[5] INFORMAÇÕES TÉCNICAS WI-FI${NC}"
-# Comando oficial da Termux:API
-WIFI_JSON=$(termux-wifi-connectioninfo 2>/dev/null)
+# Timeout de 3s para não travar o script se o GPS estiver desligado
+WIFI_JSON=$(timeout 3 termux-wifi-connectioninfo 2>/dev/null)
 
 if [[ -n "$WIFI_JSON" && "$WIFI_JSON" != "{}" ]]; then
     SSID=$(echo "$WIFI_JSON" | grep -oP '(?<="ssid": ")[^"]*' | head -n 1)
     FREQ=$(echo "$WIFI_JSON" | grep -oP '(?<="frequency_mhz": )[0-9]*' | head -n 1)
     RSSI=$(echo "$WIFI_JSON" | grep -oP '(?<="rssi": )[-\d]*' | head -n 1)
-    
-    echo -e "${AZ}SSID Atual:${NC} ${SSID:-Desconhecido}"
-    
-    if [[ -n "$FREQ" ]]; then
-        echo -ne "${AZ}Frequência:${NC} $FREQ MHz "
-        if [ "$FREQ" -lt 3000 ]; then 
-            echo -e "${VM}(2.4GHz)${NC}"
-        else 
-            echo -e "${V}(5GHz)${NC}"
-        fi
+    IP_WIFI=$(echo "$WIFI_JSON" | grep -oP '(?<="ip": ")[^"]*' | head -n 1)
+
+    # Lógica para cálculo de Canal
+    if [ "$FREQ" -ge 2412 ] && [ "$FREQ" -le 2484 ]; then
+        CANAL=$(( (FREQ - 2412) / 5 + 1 ))
+        BANDA="2.4GHz"
+    elif [ "$FREQ" -ge 5170 ] && [ "$FREQ" -le 5825 ]; then
+        CANAL=$(( (FREQ - 5170) / 5 + 34 )) # Cálculo aproximado para 5G
+        BANDA="5GHz"
+    else
+        CANAL="N/A"
+        BANDA="Desconhecida"
     fi
+
+    echo -e "${AZ}SSID:${NC} $SSID"
+    echo -e "${AZ}IP Dispositivo:${NC} $IP_WIFI"
+    echo -e "${AZ}Frequência:${NC} $FREQ MHz (${V}$BANDA${NC})"
+    echo -e "${AZ}Canal Atual:${NC} ${A}$CANAL${NC}"
+    echo -e "${AZ}Sinal (RSSI):${NC} ${RSSI} dBm"
     
-    if [[ -n "$RSSI" ]]; then
+    # Diagnóstico rápido de sinal
+    if [ "$RSSI" -le -80 ]; then echo -e "${VM}ALERTA: Sinal muito fraco!${NC}"; fi
+else
+    echo -e "${VM}Erro: Falha na API. Verifique GPS e Permissões do Termux:API.${NC}"
+fi
+
+echo -e "\n${A}--- DIAGNÓSTICO FINALIZADO ---${NC}"
         echo -ne "${AZ}Força do Sinal:${NC} ${RSSI} dBm "
         if [ "$RSSI" -ge -50 ]; then echo -e "${V}(Excelente)${NC}";
         elif [ "$RSSI" -ge -70 ]; then echo -e "${A}(Bom)${NC}";
