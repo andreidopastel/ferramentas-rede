@@ -123,40 +123,30 @@ fi
 # =====================================================
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
-# força refresh do Android
-termux-wifi-scaninfo >/dev/null 2>&1
-sleep 4
-
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
-# retry automático se vier vazio
 if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
-    sleep 3
-    SCAN=$(termux-wifi-scaninfo 2>/dev/null)
-fi
-
-if [[ "$SCAN" != "[]" && -n "$SCAN" ]]; then
-
-    echo "$SCAN" | grep -Eo '"ssid":"[^"]*"|"frequency_mhz":[0-9]+|"rssi":[-0-9]+' | \
-    awk '
-    /ssid/ {gsub(/.*:/,""); ssid=$0}
+    echo -e "${VM}Nenhuma rede detectada.${NC}"
+else
+    echo "$SCAN" | awk '
+    /ssid/ {gsub(/.*:/,""); gsub(/"|,| /,""); ssid=$0}
     /frequency_mhz/ {gsub(/.*:/,""); freq=$0}
     /rssi/ {gsub(/.*:/,""); rssi=$0}
 
-    ssid && freq && rssi {
+    ssid != "" && freq != "" && rssi != "" {
         if (freq < 3000)
             canal=int((freq-2412)/5)+1;
         else
             canal=int((freq-5170)/5)+34;
 
         print "SSID: " ssid;
-        print "Canal: " canal " | Freq: " freq " MHz | Sinal: " rssi " dBm";
-        print "-----------------------------";
+        print "Canal: " canal;
+        print "Frequência: " freq " MHz";
+        print "Sinal: " rssi " dBm";
+        print "---------------------";
 
         ssid=""; freq=""; rssi=""
     }'
-else
-    echo -e "${VM}Scan indisponível (Android bloqueou ou não atualizou ainda).${NC}"
 fi
 
 # =====================================================
