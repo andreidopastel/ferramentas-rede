@@ -10,7 +10,9 @@ NC='\033[0m'
 clear
 echo -e "${V}---- FERRAMENTA DE REDE ----${NC}"
 
-# --- ALVO ---
+# ---------------------------
+# ALVO
+# ---------------------------
 echo -ne "\nAlvo do teste? Padrão 8.8.8.8: "
 read -t 10 RESP
 TARGET=${RESP:-8.8.8.8}
@@ -80,7 +82,7 @@ else
 fi
 
 # ---------------------------
-# [5] WIFI INFO
+# [5] WI-FI ATUAL
 # ---------------------------
 echo -e "\n${A}[5] WI-FI ATUAL${NC}"
 
@@ -119,7 +121,7 @@ else
 fi
 
 # ---------------------------
-# [6] SCAN WI-FI (CORRIGIDO)
+# [6] SCAN WI-FI (CORRIGIDO DE VERDADE)
 # ---------------------------
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
@@ -127,32 +129,26 @@ SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
 if [[ "$SCAN" != "[]" && -n "$SCAN" ]]; then
 
-    echo "$SCAN" | grep -o '{[^}]*}' | while read -r r; do
+    echo "$SCAN" | grep -Eo '"ssid":"[^"]*"|"frequency_mhz":[0-9]+|"rssi":[-0-9]+' | \
+    awk '
+    /ssid/ {gsub(/.*:/,""); ssid=$0}
+    /frequency_mhz/ {gsub(/.*:/,""); freq=$0}
+    /rssi/ {gsub(/.*:/,""); rssi=$0}
 
-        SSID=$(echo "$r" | grep -oP '"ssid":\s*"\K[^"]+')
-        FREQ=$(echo "$r" | grep -oP '"frequency_mhz":\s*\K[0-9]+')
-        RSSI=$(echo "$r" | grep -oP '"rssi":\s*\K-?[0-9]+')
+    ssid && freq && rssi {
+        if (freq < 3000)
+            canal=int((freq-2412)/5)+1;
+        else
+            canal=int((freq-5170)/5)+34;
 
-        if [[ -n "$FREQ" ]]; then
-            if [ "$FREQ" -lt 3000 ]; then
-                CANAL=$(( (FREQ - 2412) / 5 + 1 ))
-            else
-                CANAL=$(( (FREQ - 5170) / 5 + 34 ))
-            fi
-        fi
+        print "SSID: " ssid;
+        print "Canal: " canal " | Freq: " freq " MHz | Sinal: " rssi " dBm";
+        print "-----------------------------";
 
-        if [[ -n "$RSSI" ]]; then
-            if [ "$RSSI" -ge -60 ]; then QUAL="Excelente"
-            elif [ "$RSSI" -ge -75 ]; then QUAL="Bom"
-            else QUAL="Fraco"; fi
-        fi
-
-        echo -e "${V}SSID:${NC} ${SSID:-Oculto}"
-        echo -e "Canal: ${A}${CANAL:-?}${NC} | Freq: $FREQ MHz | Sinal: $RSSI dBm ($QUAL)"
-        echo "-----------------------------"
-    done
+        ssid=""; freq=""; rssi=""
+    }'
 else
-    echo -e "${VM}Nenhuma rede detectada (verifique GPS/permissões).${NC}"
+    echo -e "${VM}Nenhuma rede detectada ou scan bloqueado pelo Android.${NC}"
 fi
 
 # ---------------------------
