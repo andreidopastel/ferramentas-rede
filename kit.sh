@@ -110,16 +110,18 @@ fi
 # [6] SCAN DE CANAIS WI-FI (VERSÃO DEFINITIVA)
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
-# força atualização
-termux-wifi-scaninfo >/dev/null 2>&1
-sleep 4
-
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
-# retry automático
 if [[ -z "$SCAN" || "$SCAN" == "[]" ]]; then
-    sleep 4
+    sleep 5
     SCAN=$(termux-wifi-scaninfo 2>/dev/null)
+fi
+
+if [[ -z "$SCAN" || "$SCAN" == "[]" ]]; then
+    echo -e "${VM}Nenhuma rede detectada.${NC}"
+    echo -e "${A}Dica:${NC} execute manualmente:"
+    echo "termux-wifi-scaninfo"
+    exit
 fi
 
 # valida
