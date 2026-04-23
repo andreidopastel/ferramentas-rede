@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ---------------- CORES ----------------
+# ================= CORES =================
 V='\033[0;32m'
 A='\033[1;33m'
 VM='\033[0;31m'
@@ -8,62 +8,45 @@ AZ='\033[0;34m'
 NC='\033[0m'
 
 clear
-echo -e "${V}---- FERRAMENTA DE REDE PRO MAX ----${NC}"
+echo -e "${V}==== FERRAMENTA DE REDE PRO MAX ====${NC}"
 
-# ---------------- ALVO ----------------
-echo -ne "\nAlvo do teste? Padrão 8.8.8.8: "
-read -t 10 RESP
-TARGET=${RESP:-8.8.8.8}
+# ================= ALVO =================
+echo -ne "\nAlvo (padrão 8.8.8.8): "
+read -t 10 TARGET
+TARGET=${TARGET:-8.8.8.8}
 
 # =====================================================
 # [1] ROTA
 # =====================================================
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
-> rota.txt
-
-tracepath -n "$TARGET" 2>/dev/null | while read -r line; do
-    [[ "$line" != *"no reply"* ]] && echo "$line" | tee -a rota.txt
-
-    if [[ "$line" == *"$TARGET"* ]]; then
-        echo -e "${V}Destino atingido.${NC}"
-        pkill -P $$ tracepath 2>/dev/null
-        break
-    fi
-done
+tracepath -n "$TARGET" 2>/dev/null | head -n 12
 
 # =====================================================
 # [2] REDE LOCAL
 # =====================================================
 echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
 
-GW=$(grep -m1 "1:" rota.txt | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+GW=$(ip route | awk '/default/ {print $3}' | head -n1)
 
-if [[ -z "$GW" ]]; then
-    IP=$(ip addr show wlan0 2>/dev/null | grep -w inet | awk '{print $2}' | cut -d/ -f1)
-    [[ -n "$IP" ]] && GW=$(echo "$IP" | cut -d. -f1-3).1
-fi
+echo -e "Gateway: ${V}$GW${NC}"
 
-echo -e "Roteador: ${V}$GW${NC}"
+PING_GW=$(ping -c 3 "$GW" 2>/dev/null)
+echo "$PING_GW" | grep time=
 
-ping -c 3 "$GW" > gw.txt 2>/dev/null
-
-if [[ $? -eq 0 ]]; then
-    AVG=$(grep "rtt" gw.txt | awk -F'/' '{print $5}')
-    echo -e "Latência local: ${V}${AVG:-0} ms${NC}"
-else
-    echo -e "${VM}Erro no ping do roteador${NC}"
-fi
+GW_AVG=$(echo "$PING_GW" | awk -F'/' '/rtt/ {print $5}')
+echo -e "Latência local: ${V}${GW_AVG:-0} ms${NC}"
 
 # =====================================================
 # [3] INTERNET
 # =====================================================
 echo -e "\n${A}[3] ESTABILIDADE DA INTERNET${NC}"
 
-ping -c 10 "$TARGET" | tee ping.txt
+PING_NET=$(ping -c 10 "$TARGET" 2>/dev/null)
 
-AVG=$(grep "rtt" ping.txt | awk -F'/' '{print $5}')
+echo "$PING_NET" | grep time= | head -n 5
+LAT=$(echo "$PING_NET" | awk -F'/' '/rtt/ {print $5}')
 
-echo -e "Latência média: ${V}${AVG:-0} ms${NC}"
+echo -e "Latência média: ${V}${LAT:-0} ms${NC}"
 
 # =====================================================
 # [4] SPEEDTEST
@@ -83,109 +66,114 @@ echo -e "\n${A}[5] WI-FI ATUAL${NC}"
 
 WIFI=$(termux-wifi-connectioninfo 2>/dev/null)
 
-SSID=$(echo "$WIFI" | grep -oP '"ssid":\s*"\K[^"]+')
-FREQ=$(echo "$WIFI" | grep -oP '"frequency_mhz":\s*\K[0-9]+')
-RSSI=$(echo "$WIFI" | grep -oP '"rssi":\s*\K-?[0-9]+')
+if [[ -n "$WIFI" && "$WIFI" != "{}" ]]; then
 
-[[ -z "$SSID" ]] && SSID="Oculto"
+    SSID=$(echo "$WIFI" | jq -r '.ssid')
+    FREQ=$(echo "$WIFI" | jq -r '.frequency_mhz')
+    RSSI=$(echo "$WIFI" | jq -r '.rssi')
 
-echo -e "${AZ}SSID:${NC} $SSID"
+    echo -e "${AZ}SSID:${NC} $SSID"
 
-if [[ -n "$FREQ" ]]; then
-    if [ "$FREQ" -ge 2412 ] && [ "$FREQ" -le 2484 ]; then
-        BAND="2.4GHz"
-        CH=$(( (FREQ - 2412) / 5 + 1 ))
-    elif [ "$FREQ" -ge 5170 ] && [ "$FREQ" -le 5825 ]; then
-        BAND="5GHz"
-        CH=$(( (FREQ - 5170) / 5 + 34 ))
-    else
-        BAND="?"
-        CH="?"
+    if [[ -n "$FREQ" && "$FREQ" != "null" ]]; then
+        if [ "$FREQ" -lt 3000 ]; then
+            BANDA="2.4GHz"
+            CANAL=$(( (FREQ - 2412) / 5 + 1 ))
+        else
+            BANDA="5GHz"
+            CANAL=$(( (FREQ - 5170) / 5 + 34 ))
+        fi
+
+        echo -e "Frequência: $FREQ MHz ($BANDA)"
+        echo -e "Canal atual: ${A}$CANAL${NC}"
     fi
 
-    echo -e "Frequência: $FREQ MHz ($BAND)"
-    echo -e "Canal: $CH"
-fi
+    if [[ -n "$RSSI" ]]; then
+        if [ "$RSSI" -ge -60 ]; then QUAL="Excelente"
+        elif [ "$RSSI" -ge -75 ]; then QUAL="Bom"
+        else QUAL="Ruim"; fi
 
-if [[ -n "$RSSI" ]]; then
-    [[ "$RSSI" -ge -60 ]] && Q="Excelente"
-    [[ "$RSSI" -lt -60 && "$RSSI" -ge -75 ]] && Q="Bom"
-    [[ "$RSSI" -lt -75 ]] && Q="Ruim"
-
-    echo -e "Sinal: $RSSI dBm ($Q)"
+        echo -e "Sinal: $RSSI dBm (${V}$QUAL${NC})"
+    fi
+else
+    echo -e "${VM}Ative localização (GPS)${NC}"
 fi
 
 # =====================================================
-# [6] ANALISADOR WI-FI PRO MAX
+# [6] SCAN + ANALISADOR PRO MAX
 # =====================================================
 echo -e "\n${A}[6] ANALISADOR WI-FI PRO MAX${NC}"
 
+# força atualização do Android
+termux-wifi-scaninfo >/dev/null 2>&1
+sleep 3
+
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
+# retry automático
 if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
-    echo -e "${VM}Scan indisponível (ative localização e aguarde alguns segundos).${NC}"
-else
-
-echo "$SCAN" | grep -oP '\{[^}]+\}' | while read -r line; do
-
-    SSID=$(echo "$line" | grep -oP '"ssid"\s*:\s*"\K[^"]*')
-    FREQ=$(echo "$line" | grep -oP '"frequency_mhz"\s*:\s*\K[0-9]+')
-    RSSI=$(echo "$line" | grep -oP '"rssi"\s*:\s*\K-?[0-9]+')
-
-    [[ -z "$SSID" ]] && SSID="Oculto"
-
-    if [[ -n "$FREQ" ]]; then
-        if [ "$FREQ" -ge 2412 ] && [ "$FREQ" -le 2484 ]; then
-            BAND="2.4GHz"
-            CH=$(( (FREQ - 2412) / 5 + 1 ))
-        elif [ "$FREQ" -ge 5170 ] && [ "$FREQ" -le 5825 ]; then
-            BAND="5GHz"
-            CH=$(( (FREQ - 5170) / 5 + 34 ))
-        else
-            BAND="?"
-            CH="?"
-        fi
-    fi
-
-    echo -e "SSID: ${V}$SSID${NC}"
-    echo -e "Banda: $BAND"
-    echo -e "Canal: $CH"
-    echo -e "Sinal: $RSSI dBm"
-    echo "----------------"
-
-done
-
-echo -e "\n=== RECOMENDAÇÃO FINAL ==="
-
-echo "$SCAN" | grep -oP '"frequency_mhz"\s*:\s*\K[0-9]+' | awk '
-{
-    f=$1
-
-    if (f>=2412 && f<=2484) c=int((f-2412)/5)+1
-    else if (f>=5170 && f<=5825) c=int((f-5170)/5)+34
-    else c=-1
-
-    if (c>0) count[c]++
-}
-END{
-    min=999
-    best=1
-
-    for (i in count) {
-        if (count[i] < min) {
-            min=count[i]
-            best=i
-        }
-    }
-
-    print "Melhor canal sugerido:", best
-}
-'
+    sleep 3
+    SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 fi
 
-# =====================================================
-# FINAL
-# =====================================================
-echo -e "\n${V}---- PRO MAX FINALIZADO ----${NC}"
+if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
+    echo -e "${VM}Nenhuma rede detectada (GPS desligado ou bloqueio Android)${NC}"
+    exit
+fi
 
-rm -f rota.txt gw.txt ping.txt
+declare -A CH24
+declare -A CH5
+
+echo ""
+
+echo "$SCAN" | jq -c '.[]' | while read rede; do
+
+    SSID=$(echo "$rede" | jq -r '.ssid')
+    FREQ=$(echo "$rede" | jq -r '.frequency_mhz')
+    RSSI=$(echo "$rede" | jq -r '.rssi')
+
+    if [[ "$FREQ" -lt 3000 ]]; then
+        CANAL=$(( (FREQ - 2412) / 5 + 1 ))
+        BANDA="2.4GHz"
+        CH24[$CANAL]=$(( ${CH24[$CANAL]:-0} + (-1 * RSSI) ))
+    else
+        CANAL=$(( (FREQ - 5000) / 5 ))
+        BANDA="5GHz"
+        CH5[$CANAL]=$(( ${CH5[$CANAL]:-0} + (-1 * RSSI) ))
+    fi
+
+    echo -e "${V}SSID:${NC} ${SSID:-Oculto}"
+    echo -e "Banda: $BANDA"
+    echo -e "Canal: ${A}$CANAL${NC}"
+    echo -e "Sinal: $RSSI dBm"
+    echo "-------------------------"
+done
+
+# ================= MELHOR CANAL =================
+
+BEST24=1
+VAL24=99999
+
+for i in {1..11}; do
+    VAL=${CH24[$i]:-0}
+    if (( VAL < VAL24 )); then
+        VAL24=$VAL
+        BEST24=$i
+    fi
+done
+
+BEST5=36
+VAL5=99999
+
+for i in 36 40 44 48 149 153 157 161; do
+    VAL=${CH5[$i]:-0}
+    if (( VAL < VAL5 )); then
+        VAL5=$VAL
+        BEST5=$i
+    fi
+done
+
+echo -e "\n${A}=== RECOMENDAÇÃO FINAL ===${NC}"
+echo -e "Melhor canal 2.4GHz: ${V}$BEST24${NC}"
+echo -e "Melhor canal 5GHz: ${V}$BEST5${NC}"
+
+echo -e "\n${V}==== PRO MAX FINALIZADO ====${NC}"
