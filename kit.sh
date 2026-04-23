@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# --- CORES ---
+# ---------------- CORES ----------------
 V='\033[0;32m'
 A='\033[1;33m'
 VM='\033[0;31m'
@@ -10,16 +10,14 @@ NC='\033[0m'
 clear
 echo -e "${V}---- FERRAMENTA DE REDE ----${NC}"
 
-# ---------------------------
-# ALVO
-# ---------------------------
+# ---------------- ALVO ----------------
 echo -ne "\nAlvo do teste? Padrão 8.8.8.8: "
 read -t 10 RESP
 TARGET=${RESP:-8.8.8.8}
 
-# ---------------------------
+# =====================================================
 # [1] ROTA
-# ---------------------------
+# =====================================================
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
 > rota.txt
 
@@ -33,9 +31,9 @@ tracepath -n "$TARGET" 2>/dev/null | while read -r line; do
     fi
 done
 
-# ---------------------------
+# =====================================================
 # [2] REDE LOCAL
-# ---------------------------
+# =====================================================
 echo -e "\n${A}[2] TESTE DE REDE LOCAL${NC}"
 
 GW_DETECTADO=$(grep -m 1 "1: " rota.txt | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b")
@@ -59,9 +57,9 @@ else
     echo -e "${VM}Erro no ping do roteador.${NC}"
 fi
 
-# ---------------------------
+# =====================================================
 # [3] INTERNET
-# ---------------------------
+# =====================================================
 echo -e "\n${A}[3] ESTABILIDADE DA INTERNET${NC}"
 
 ping -c 10 "$TARGET" | tee ping.txt
@@ -70,9 +68,9 @@ LAT_AVG=$(grep "rtt" ping.txt | awk -F'/' '{print $5}' | cut -d'.' -f1)
 
 echo -e "Latência média: ${V}${LAT_AVG:-0} ms${NC}"
 
-# ---------------------------
+# =====================================================
 # [4] SPEEDTEST
-# ---------------------------
+# =====================================================
 echo -e "\n${A}[4] VELOCIDADE${NC}"
 
 if command -v speedtest-cli &>/dev/null; then
@@ -81,9 +79,9 @@ else
     echo -e "${VM}Instale: pkg install speedtest-cli${NC}"
 fi
 
-# ---------------------------
-# [5] WI-FI ATUAL
-# ---------------------------
+# =====================================================
+# [5] WIFI ATUAL
+# =====================================================
 echo -e "\n${A}[5] WI-FI ATUAL${NC}"
 
 WIFI=$(termux-wifi-connectioninfo 2>/dev/null)
@@ -120,12 +118,22 @@ else
     echo -e "${VM}Ative localização (GPS).${NC}"
 fi
 
-# ---------------------------
-# [6] SCAN WI-FI (CORRIGIDO DE VERDADE)
-# ---------------------------
+# =====================================================
+# [6] SCAN WI-FI (VERSÃO ESTÁVEL)
+# =====================================================
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
+# força refresh do Android
+termux-wifi-scaninfo >/dev/null 2>&1
+sleep 4
+
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
+
+# retry automático se vier vazio
+if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
+    sleep 3
+    SCAN=$(termux-wifi-scaninfo 2>/dev/null)
+fi
 
 if [[ "$SCAN" != "[]" && -n "$SCAN" ]]; then
 
@@ -148,12 +156,12 @@ if [[ "$SCAN" != "[]" && -n "$SCAN" ]]; then
         ssid=""; freq=""; rssi=""
     }'
 else
-    echo -e "${VM}Nenhuma rede detectada ou scan bloqueado pelo Android.${NC}"
+    echo -e "${VM}Scan indisponível (Android bloqueou ou não atualizou ainda).${NC}"
 fi
 
-# ---------------------------
+# =====================================================
 # FINAL
-# ---------------------------
+# =====================================================
 echo -e "\n${V}---- DIAGNÓSTICO FINALIZADO ----${NC}"
 
 rm -f rota.txt gw.txt ping.txt
