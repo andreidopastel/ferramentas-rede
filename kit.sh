@@ -90,7 +90,7 @@ if [[ -n "$WIFI_JSON" && "$WIFI_JSON" != "{}" ]]; then
         if [ "$FREQ" -lt 3000 ]; then 
             BANDA="2.4GHz"
             CANAL=$(( (FREQ - 2412) / 5 + 1 ))
-        else 
+        else 8
             BANDA="5GHz"
             CANAL=$(( (FREQ - 5170) / 5 + 34 ))
         fi
@@ -107,7 +107,35 @@ if [[ -n "$WIFI_JSON" && "$WIFI_JSON" != "{}" ]]; then
 else
     echo -e "${VM}Erro: API não respondeu. Ligue o GPS.${NC}"
 fi
+# [6] SCAN DE CANAIS WI-FI (REDES PRÓXIMAS)
+echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
+SCAN_JSON=$(timeout 5 termux-wifi-scaninfo 2>/dev/null)
+
+if [[ -n "$SCAN_JSON" && "$SCAN_JSON" != "[]" ]]; then
+    echo -e "${AZ}Redes encontradas:${NC}\n"
+    
+    echo "$SCAN_JSON" | grep -oP '{[^}]*}' | while read -r rede; do
+        SSID=$(echo "$rede" | grep -oP '(?<="ssid":")[^"]*')
+        FREQ=$(echo "$rede" | grep -oP '(?<="frequency_mhz":)[0-9]*')
+        RSSI=$(echo "$rede" | grep -oP '(?<="rssi":)-?[0-9]*')
+        
+        # Calcula canal
+        if [[ -n "$FREQ" ]]; then
+            if [ "$FREQ" -lt 3000 ]; then
+                CANAL=$(( (FREQ - 2412) / 5 + 1 ))
+            else
+                CANAL=$(( (FREQ - 5170) / 5 + 34 ))
+            fi
+        fi
+        
+        echo -e "${V}SSID:${NC} ${SSID:-Oculto}"
+        echo -e "Canal: ${A}${CANAL:-?}${NC} | Frequência: $FREQ MHz | Sinal: $RSSI dBm"
+        echo "-----------------------------"
+    done
+else
+    echo -e "${VM}Erro ao escanear redes. Ative localização (GPS).${NC}"
+fi
 echo -e "\n${V}---- DIAGNÓSTICO FINALIZADO ----${NC}"
 
 # Limpeza silenciosa
