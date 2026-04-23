@@ -107,53 +107,55 @@ if [[ -n "$WIFI_JSON" && "$WIFI_JSON" != "{}" ]]; then
 else
     echo -e "${VM}Erro: API não respondeu. Ligue o GPS.${NC}"
 fi
-# [6] SCAN DE CANAIS WI-FI (CORRIGIDO)
+# [6] SCAN DE CANAIS WI-FI (VERSÃO DEFINITIVA)
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
 # força atualização
 termux-wifi-scaninfo >/dev/null 2>&1
-sleep 3
+sleep 4
 
-SCAN_JSON=$(termux-wifi-scaninfo 2>/dev/null)
+SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
-# retry se vier vazio
-if [[ -z "$SCAN_JSON" || "$SCAN_JSON" == "[]" ]]; then
-    sleep 3
-    SCAN_JSON=$(termux-wifi-scaninfo 2>/dev/null)
+# retry automático
+if [[ -z "$SCAN" || "$SCAN" == "[]" ]]; then
+    sleep 4
+    SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 fi
 
-if [[ -n "$SCAN_JSON" && "$SCAN_JSON" != "[]" ]]; then
-    echo -e "${AZ}Redes encontradas:${NC}\n"
-
-    echo "$SCAN_JSON" | jq -c '.[]' | while read -r rede; do
-        SSID=$(echo "$rede" | jq -r '.ssid')
-        FREQ=$(echo "$rede" | jq -r '.frequency_mhz')
-        RSSI=$(echo "$rede" | jq -r '.rssi')
-
-        if [[ -n "$FREQ" && "$FREQ" != "null" ]]; then
-            if [ "$FREQ" -lt 3000 ]; then
-                CANAL=$(( (FREQ - 2412) / 5 + 1 ))
-                BANDA="2.4GHz"
-            else
-                CANAL=$(( (FREQ - 5170) / 5 + 34 ))
-                BANDA="5GHz"
-            fi
-        else
-            CANAL="?"
-            BANDA="?"
-        fi
-
-        echo -e "${V}SSID:${NC} ${SSID:-Oculto}"
-        echo -e "Banda: $BANDA"
-        echo -e "Canal: ${A}$CANAL${NC}"
-        echo -e "Frequência: $FREQ MHz"
-        echo -e "Sinal: $RSSI dBm"
-        echo "-----------------------------"
-    done
-
-else
-    echo -e "${VM}Erro ao escanear redes. Ative localização (GPS).${NC}"
+if [[ -z "$SCAN" || "$SCAN" == "[]" ]]; then
+    echo -e "${VM}Nenhuma rede detectada.${NC}"
+    echo -e "${A}Possíveis causas:${NC}"
+    echo "- GPS desligado"
+    echo "- Permissão de localização negada"
+    echo "- Android não atualizou scan ainda"
+    exit
 fi
+
+echo -e "${AZ}Redes encontradas:${NC}\n"
+
+echo "$SCAN" | jq -c '.[]' | while read -r rede; do
+
+    SSID=$(echo "$rede" | jq -r '.ssid')
+    FREQ=$(echo "$rede" | jq -r '.frequency_mhz')
+    RSSI=$(echo "$rede" | jq -r '.rssi')
+
+    # cálculo do canal correto
+    if [[ "$FREQ" -lt 3000 ]]; then
+        CANAL=$(( (FREQ - 2412) / 5 + 1 ))
+        BANDA="2.4GHz"
+    else
+        CANAL=$(( (FREQ - 5000) / 5 ))
+        BANDA="5GHz"
+    fi
+
+    echo -e "${V}SSID:${NC} ${SSID:-Oculto}"
+    echo -e "Banda: $BANDA"
+    echo -e "Canal: ${A}$CANAL${NC}"
+    echo -e "Frequência: $FREQ MHz"
+    echo -e "Sinal: $RSSI dBm"
+    echo "-----------------------------"
+
+done
 echo -e "\n${V}---- DIAGNÓSTICO FINALIZADO ----${NC}"
 
 # Limpeza silenciosa
