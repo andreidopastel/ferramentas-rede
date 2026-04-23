@@ -77,7 +77,7 @@ else
 fi
 
 # =====================================================
-# [5] WIFI ATUAL
+# [5] WI-FI ATUAL
 # =====================================================
 echo -e "\n${A}[5] WI-FI ATUAL${NC}"
 
@@ -86,6 +86,8 @@ WIFI=$(termux-wifi-connectioninfo 2>/dev/null)
 SSID=$(echo "$WIFI" | grep -oP '"ssid":\s*"\K[^"]+')
 FREQ=$(echo "$WIFI" | grep -oP '"frequency_mhz":\s*\K[0-9]+')
 RSSI=$(echo "$WIFI" | grep -oP '"rssi":\s*\K-?[0-9]+')
+
+[[ -z "$SSID" ]] && SSID="Oculto"
 
 echo -e "${AZ}SSID:${NC} $SSID"
 
@@ -114,72 +116,61 @@ if [[ -n "$RSSI" ]]; then
 fi
 
 # =====================================================
-# [6] SCAN WI-FI + ANÁLISE DE CANAL
+# [6] ANALISADOR WI-FI PRO MAX
 # =====================================================
 echo -e "\n${A}[6] ANALISADOR WI-FI PRO MAX${NC}"
 
-SCAN=""
-for i in 1 2 3; do
-    SCAN=$(termux-wifi-scaninfo 2>/dev/null)
-    [[ "$SCAN" != "[]" && -n "$SCAN" ]] && break
-    sleep 3
-done
+SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
 if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
-    echo -e "${VM}Scan bloqueado pelo Android${NC}"
+    echo -e "${VM}Scan indisponível (ative localização e aguarde alguns segundos).${NC}"
 else
 
-echo "$SCAN" | awk '
-{
-    if ($0 ~ /ssid/) {
-        gsub(/.*"ssid":"/,"")
-        gsub(/".*/,"")
-        ssid=$0
-    }
-    if ($0 ~ /frequency_mhz/) {
-        gsub(/.*:/,"")
-        freq=$0
-    }
-    if ($0 ~ /rssi/) {
-        gsub(/.*:/,"")
-        rssi=$0
+echo "$SCAN" | grep -oP '\{[^}]+\}' | while read -r line; do
 
-        if (freq >= 2412 && freq <= 2484)
-            ch=int((freq-2412)/5)+1
-        else if (freq >= 5170 && freq <= 5825)
-            ch=int((freq-5170)/5)+34
+    SSID=$(echo "$line" | grep -oP '"ssid"\s*:\s*"\K[^"]*')
+    FREQ=$(echo "$line" | grep -oP '"frequency_mhz"\s*:\s*\K[0-9]+')
+    RSSI=$(echo "$line" | grep -oP '"rssi"\s*:\s*\K-?[0-9]+')
+
+    [[ -z "$SSID" ]] && SSID="Oculto"
+
+    if [[ -n "$FREQ" ]]; then
+        if [ "$FREQ" -ge 2412 ] && [ "$FREQ" -le 2484 ]; then
+            BAND="2.4GHz"
+            CH=$(( (FREQ - 2412) / 5 + 1 ))
+        elif [ "$FREQ" -ge 5170 ] && [ "$FREQ" -le 5825 ]; then
+            BAND="5GHz"
+            CH=$(( (FREQ - 5170) / 5 + 34 ))
         else
-            ch="?"
+            BAND="?"
+            CH="?"
+        fi
+    fi
 
-        print "SSID: " ssid
-        print "Banda: " (freq<3000?"2.4GHz":"5GHz")
-        print "Canal: " ch
-        print "Sinal: " rssi " dBm"
-        print "----------------"
+    echo -e "SSID: ${V}$SSID${NC}"
+    echo -e "Banda: $BAND"
+    echo -e "Canal: $CH"
+    echo -e "Sinal: $RSSI dBm"
+    echo "----------------"
 
-        ssid=""; freq=""; rssi=""
-    }
-}
-'
+done
 
 echo -e "\n=== RECOMENDAÇÃO FINAL ==="
 
-echo "$SCAN" | awk '
+echo "$SCAN" | grep -oP '"frequency_mhz"\s*:\s*\K[0-9]+' | awk '
 {
-    if ($0 ~ /frequency_mhz/) {
-        gsub(/.*:/,"")
-        f=$0
+    f=$1
 
-        if (f>=2412 && f<=2484) c=int((f-2412)/5)+1
-        else if (f>=5170 && f<=5825) c=int((f-5170)/5)+34
-        else c=-1
+    if (f>=2412 && f<=2484) c=int((f-2412)/5)+1
+    else if (f>=5170 && f<=5825) c=int((f-5170)/5)+34
+    else c=-1
 
-        if (c>0) count[c]++
-    }
+    if (c>0) count[c]++
 }
 END{
     min=999
     best=1
+
     for (i in count) {
         if (count[i] < min) {
             min=count[i]
