@@ -232,6 +232,96 @@ else
 
 fi
 
+# =====================================================
+# [7] CHECKLIST TÉCNICO (INTERATIVO)
+# =====================================================
+echo -e "\n${A}[7] CHECKLIST TÉCNICO (ATENDIMENTO)${NC}"
+
+# Função simples de pergunta
+perguntar() {
+    echo -ne "$1 (s/n): "
+    read resp
+    [[ "$resp" == "s" || "$resp" == "S" ]] && echo -e "${V}OK${NC}" || echo -e "${VM}Verificar${NC}"
+}
+
+echo -e "\n${AZ}Responda com base no local:${NC}\n"
+
+# 01 - Sinal ONU
+perguntar "01 - Sinal da ONU está dentro do padrão?"
+
+# 02 - WiFi 2.4 e 5GHz
+perguntar "02 - WiFi 2.4GHz e 5GHz estão ativos e fortes?"
+
+# 03 - Canais (você já tem automático)
+echo -e "03 - Canais Wi-Fi analisados automaticamente ✔"
+
+# 04 - Latência (já automático)
+echo -e "04 - Latência testada automaticamente ✔"
+
+# 05 - Acesso remoto
+perguntar "05 - Acesso remoto ativado e funcionando?"
+
+# 06 - Dispositivos cliente
+perguntar "06 - Dispositivos compatíveis com a velocidade?"
+perguntar "   - Modo economia de bateria está DESATIVADO?"
+
+# 07 - Cobertura WiFi
+perguntar "07 - Sinal Wi-Fi está bom nos locais com problema?"
+
+# 08 - Aplicações com problema
+echo -ne "08 - Quais apps/sites apresentam lentidão? "
+read APPS
+echo -e "Registrado: ${A}$APPS${NC}"
+
+# 09 - SN da ONU
+echo -ne "09 - Informe o SN da ONU: "
+read SN
+echo -e "SN registrado: ${A}$SN${NC}"
+
+echo -e "\n${V}Checklist finalizado.${NC}"
+
+# =====================================================
+# [8] GERAR RELATÓRIO WORD AUTOMÁTICO
+# =====================================================
+echo -e "\n${A}[8] GERANDO RELATÓRIO WORD...${NC}"
+
+ARQ="relatorio_$(date +%Y%m%d_%H%M%S).docx"
+
+python <<EOF
+from docx import Document
+
+doc = Document()
+doc.add_heading('Relatório Técnico de Rede', 0)
+
+doc.add_paragraph("Data: $(date)")
+doc.add_paragraph("Alvo testado: $TARGET")
+
+doc.add_paragraph("\n--- REDE ---")
+doc.add_paragraph("Gateway: $GW_DETECTADO")
+doc.add_paragraph("Latência local: ${GW_AVG} ms")
+doc.add_paragraph("Latência internet: ${LAT_AVG} ms")
+
+doc.add_paragraph("\n--- WI-FI ---")
+doc.add_paragraph("SSID: ${SSID}")
+doc.add_paragraph("Frequência: ${FREQ} MHz")
+doc.add_paragraph("Canal atual: ${CANAL}")
+doc.add_paragraph("Sinal: ${RSSI} dBm")
+
+doc.add_paragraph("\n--- RECOMENDAÇÃO ---")
+doc.add_paragraph("Melhor canal 2.4GHz: ${melhor24}")
+doc.add_paragraph("Melhor canal 5GHz: ${melhor5}")
+
+doc.add_paragraph("\n--- CLIENTE ---")
+doc.add_paragraph("SN ONU: ${SN}")
+doc.add_paragraph("PPPoE: ${PPP_USER}")
+doc.add_paragraph("Plano: ${PLANO}")
+doc.add_paragraph("Apps com problema: ${APPS}")
+
+doc.save("$ARQ")
+EOF
+
+echo -e "${V}Relatório salvo:${NC} $ARQ"
+
 echo -e "\n${V}---- DIAGNÓSTICO FINALIZADO ----${NC}"
 
 # Limpeza
