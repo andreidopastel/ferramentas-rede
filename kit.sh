@@ -119,21 +119,25 @@ else
 fi
 
 # =====================================================
-# [6] SCAN WI-FI (VERSÃO ESTÁVEL)
+# [6] SCAN WI-FI (CORRIGIDO DEFINITIVO)
 # =====================================================
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
+
+# força atualização
+termux-wifi-scaninfo >/dev/null 2>&1
+sleep 4
 
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
 if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
-    echo -e "${VM}Nenhuma rede detectada.${NC}"
+    echo -e "${VM}Nenhuma rede detectada ou scan bloqueado.${NC}"
 else
     echo "$SCAN" | awk '
     /ssid/ {gsub(/.*:/,""); gsub(/"|,| /,""); ssid=$0}
     /frequency_mhz/ {gsub(/.*:/,""); freq=$0}
     /rssi/ {gsub(/.*:/,""); rssi=$0}
 
-    ssid != "" && freq != "" && rssi != "" {
+    ssid && freq && rssi {
         if (freq < 3000)
             canal=int((freq-2412)/5)+1;
         else
@@ -141,9 +145,9 @@ else
 
         print "SSID: " ssid;
         print "Canal: " canal;
-        print "Frequência: " freq " MHz";
+        print "Freq: " freq " MHz";
         print "Sinal: " rssi " dBm";
-        print "---------------------";
+        print "------------------";
 
         ssid=""; freq=""; rssi=""
     }'
