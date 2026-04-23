@@ -154,7 +154,73 @@ echo "$SCAN" | jq -c '.[]' | while read -r rede; do
     echo -e "Frequência: $FREQ MHz"
     echo -e "Sinal: $RSSI dBm"
     echo "-----------------------------"
+echo -e "\n${A}=== ANÁLISE DE CANAIS ===${NC}"
 
+# Arrays de peso
+declare -A canais24
+declare -A canais5
+
+# Inicializa canais importantes
+for c in 1 6 11; do canais24[$c]=0; done
+for c in 36 40 44 48 149 153 157 161; do canais5[$c]=0; done
+
+# Processa scan
+echo "$SCAN" | grep -oP '"frequency_mhz":\s*[0-9]+|"rssi":\s*-?[0-9]+' | \
+awk '
+/frequency_mhz/ {gsub(/.*: /,""); freq=$0}
+/rssi/ {gsub(/.*: /,""); rssi=$0}
+
+freq && rssi {
+    if (freq < 3000)
+        canal=int((freq-2412)/5)+1;
+    else
+        canal=int((freq-5170)/5)+34;
+
+    print canal, rssi
+    freq=""; rssi=""
+}' | while read canal rssi; do
+
+    peso=$((100 + rssi))  # sinal mais forte = mais peso
+
+    # 2.4 GHz (considera sobreposição)
+    for c in 1 6 11; do
+        if (( canal >= c-2 && canal <= c+2 )); then
+            canais24[$c]=$(( ${canais24[$c]} + peso ))
+        fi
+    done
+
+    # 5 GHz (direto)
+    for c in 36 40 44 48 149 153 157 161; do
+        if (( canal == c )); then
+            canais5[$c]=$(( ${canais5[$c]} + peso ))
+        fi
+    done
+done
+
+# Escolhe melhor canal (menor interferência)
+melhor24=1
+menor24=99999
+
+for c in 1 6 11; do
+    if (( ${canais24[$c]} < menor24 )); then
+        menor24=${canais24[$c]}
+        melhor24=$c
+    fi
+done
+
+melhor5=36
+menor5=99999
+
+for c in 36 40 44 48 149 153 157 161; do
+    if (( ${canais5[$c]} < menor5 )); then
+        menor5=${canais5[$c]}
+        melhor5=$c
+    fi
+done
+
+echo -e "\n${V}=== RECOMENDAÇÃO FINAL ===${NC}"
+echo -e "Melhor canal 2.4GHz: ${A}$melhor24${NC}"
+echo -e "Melhor canal 5GHz: ${A}$melhor5${NC}"
 done
 echo -e "\n${V}---- DIAGNÓSTICO FINALIZADO ----${NC}"
 
