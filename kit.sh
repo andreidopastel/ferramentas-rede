@@ -119,25 +119,26 @@ else
 fi
 
 # =====================================================
-# [6] SCAN WI-FI (CORRIGIDO DEFINITIVO)
+# [6] SCAN + MELHOR CANAL (VERSÃO FINAL)
 # =====================================================
 echo -e "\n${A}[6] SCAN DE CANAIS WI-FI${NC}"
 
-# força atualização
 termux-wifi-scaninfo >/dev/null 2>&1
 sleep 4
 
 SCAN=$(termux-wifi-scaninfo 2>/dev/null)
 
 if [[ "$SCAN" == "[]" || -z "$SCAN" ]]; then
-    echo -e "${VM}Nenhuma rede detectada ou scan bloqueado.${NC}"
+    echo -e "${VM}Nenhuma rede detectada.${NC}"
 else
+
     echo "$SCAN" | awk '
-    /ssid/ {gsub(/.*:/,""); gsub(/"|,| /,""); ssid=$0}
-    /frequency_mhz/ {gsub(/.*:/,""); freq=$0}
-    /rssi/ {gsub(/.*:/,""); rssi=$0}
+    /ssid/      {gsub(/.*:|\"|,/, "", $0); ssid=$0}
+    /frequency_mhz/ {gsub(/.*:|,/, "", $0); freq=$0}
+    /rssi/      {gsub(/.*:|,/, "", $0); rssi=$0}
 
     ssid && freq && rssi {
+
         if (freq < 3000)
             canal=int((freq-2412)/5)+1;
         else
@@ -147,9 +148,33 @@ else
         print "Canal: " canal;
         print "Freq: " freq " MHz";
         print "Sinal: " rssi " dBm";
-        print "------------------";
+        print "---------------------";
+
+        # só 2.4 GHz entra no cálculo
+        if (freq >= 2412 && freq <= 2472) {
+            load[canal] += (rssi * -1)
+            count[canal]++
+        }
 
         ssid=""; freq=""; rssi=""
+    }
+
+    END {
+        best=99999
+        bestch=1
+
+        for (c=1; c<=11; c++) {
+            if (count[c] > 0) {
+                avg = load[c] / count[c]
+                if (avg < best) {
+                    best = avg
+                    bestch = c
+                }
+            }
+        }
+
+        print "\n--- RECOMENDAÇÃO ---"
+        print "Melhor canal (2.4GHz): " bestch
     }'
 fi
 
