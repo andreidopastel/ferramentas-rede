@@ -12,10 +12,10 @@ clear
 echo -e "${V}---- FERRAMENTA DE REDE ----${NC}"
 
 # Seleção de Alvo
-echo -ne "\nAlvo do teste? Padrão 143.0.36.38: "
+echo -ne "\nAlvo do teste? Padrão 143.0.36.20: "
 read -t 10 RESP
 TARGET=${RESP:-143.0.36.38}
-[[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="143.0.36.38"
+[[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="143.0.36.20"
 
 # [1] RASTREIO DE ROTA INTELIGENTE (PARA NO ALVO)
 echo -e "\n${A}[1] RASTREIO DE ROTA${NC}"
