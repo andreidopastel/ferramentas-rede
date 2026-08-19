@@ -12,7 +12,7 @@ clear
 echo -e "${V}---- FERRAMENTA DE REDE ----${NC}"
 
 # Seleção de Alvo
-echo -ne "\nAlvo do teste? Padrão 143.0.36.20: "
+echo -ne "\nAlvo do teste? Padrão 143.0.36.20 t: "
 read -t 10 RESP
 TARGET=${RESP:-143.0.36.20}
 [[ "$TARGET" == "y" || -z "$TARGET" ]] && TARGET="143.0.36.20"
